@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>HRM Pro System</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{font-family:'Segoe UI';margin:0;background:#eef2f7}
+header{background:#1e3a8a;color:#fff;padding:18px;text-align:center;font-size:22px;font-weight:700}
+
+.container{max-width:1200px;margin:auto;padding:20px}
+
+.card{
+  background:#fff;
+  padding:15px;
+  border-radius:12px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  margin-top:15px;
+}
+
+input{padding:10px;border-radius:8px;border:1px solid #ddd;margin:5px}
+button{padding:8px 12px;border:none;border-radius:8px;background:#2563eb;color:white;cursor:pointer}
+button:hover{background:#1e40af}
+
+.hidden{display:none}
+
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th{background:#2563eb;color:#fff}
+th,td{padding:10px;text-align:center}
+
+.dashboard{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+</style>
+</head>
+
+<body>
+<header>HRM PRO SYSTEM</header>
+
+<div class="container">
+
+<div id="login">
+<input id="loginUser" placeholder="User">
+<input id="loginPass" type="password" placeholder="Pass">
+<button onclick="login()">Login</button>
+<p onclick="show('register')" style="color:blue;cursor:pointer">Đăng ký</p>
+</div>
+
+<div id="register" class="hidden">
+<input id="regUser" placeholder="User">
+<input id="regPass" placeholder="Pass">
+<button onclick="register()">Đăng ký</button>
+<p onclick="show('login')">Quay lại</p>
+</div>
+
+<div id="main" class="hidden">
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+<div class="card">
+<h3>Thống kê nhân viên</h3>
+<canvas id="chart"></canvas>
+</div>
+
+<div class="card">
+<h3>Tổng quan</h3>
+<p>Tổng NV: <span id="totalEmp"></span></p>
+<p>Tuyển dụng: <span id="totalJob"></span></p>
+</div>
+
+</div>
+
+<!-- NHÂN VIÊN -->
+<div class="card">
+<h3>Nhân viên</h3>
+<input id="search" placeholder="Tìm..." onkeyup="searchEmp()">
+<table id="empTable"></table>
+
+<input id="ma" placeholder="Mã">
+<input id="ten" placeholder="Tên">
+<input id="phong" placeholder="Phòng">
+<input id="cv" placeholder="Chức vụ">
+<input id="luong" placeholder="Lương">
+<input id="bh" placeholder="Bảo hiểm">
+<input id="pl" placeholder="Phúc lợi">
+<input type="file" id="file">
+<button onclick="addOrUpdate()">Lưu</button>
+</div>
+
+<!-- TUYỂN DỤNG -->
+<div class="card">
+<h3>Tuyển dụng</h3>
+<table id="jobTable"></table>
+
+<input id="jobId" placeholder="Mã">
+<input id="jobName" placeholder="Vị trí">
+<input id="qty" placeholder="Số lượng">
+<button onclick="addJob()">Đăng</button>
+</div>
+
+</div>
+</div>
+
+<script>
+
+let users=[],employees=[],jobs=[],editIndex=-1,chart;
+
+/* STORAGE */
+function save(){
+  localStorage.setItem('users',JSON.stringify(users));
+  localStorage.setItem('employees',JSON.stringify(employees));
+  localStorage.setItem('jobs',JSON.stringify(jobs));
+}
+
+function load(){
+  users=JSON.parse(localStorage.getItem('users'))||[];
+  employees=JSON.parse(localStorage.getItem('employees'))||[];
+  jobs=JSON.parse(localStorage.getItem('jobs'))||[];
+}
+
+/* UI */
+function show(id){
+  ['login','register','main'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+/* LOGIN */
+function login(){
+  let f=users.find(x=>x.u==loginUser.value&&x.p==loginPass.value);
+  if(f){show('main');render();}
+  else alert('Sai');
+}
+
+/* REGISTER */
+function register(){
+  if(!regUser.value||!regPass.value){alert('Nhập đủ');return;}
+  if(users.find(x=>x.u==regUser.value)){alert('Trùng');return;}
+  users.push({u:regUser.value,p:regPass.value});
+  save();
+  alert('OK');
+  show('login');
+}
+
+/* MONEY */
+function formatMoney(v){
+  return v.replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+}
+
+/* ADD */
+function addOrUpdate(){
+
+  let file=document.getElementById('file').files[0];
+
+  let data={
+    ma:ma.value,
+    ten:ten.value,
+    phong:phong.value,
+    cv:cv.value,
+    luong:formatMoney(luong.value),
+    bh:bh.value,
+    pl:pl.value,
+    file:file?URL.createObjectURL(file):''
+  };
+
+  if(editIndex==-1) employees.push(data);
+  else{employees[editIndex]=data;editIndex=-1;}
+
+  save();
+  render();
+}
+
+/* EDIT DELETE */
+function editEmp(i){
+  let e=employees[i];
+  ma.value=e.ma;ten.value=e.ten;phong.value=e.phong;
+  cv.value=e.cv;luong.value=e.luong;bh.value=e.bh;pl.value=e.pl;
+  editIndex=i;
+}
+
+function delEmp(i){
+  employees.splice(i,1);
+  save();render();
+}
+
+/* RENDER */
+function render(list=employees){
+
+  empTable.innerHTML=`<tr>
+  <th>Mã</th><th>Tên</th><th>Phòng</th>
+  <th>CV</th><th>Lương</th><th>CV File</th><th>HĐ</th></tr>`;
+
+  list.forEach((e,i)=>{
+    let r=empTable.insertRow();
+    r.innerHTML=`
+    <td>${e.ma}</td>
+    <td>${e.ten}</td>
+    <td>${e.phong}</td>
+    <td>${e.cv}</td>
+    <td>${e.luong}</td>
+    <td>${e.file?`<a href="${e.file}" target="_blank">Mở CV</a>`:''}</td>
+    <td>
+    <button onclick="editEmp(${i})">Sửa</button>
+    <button onclick="delEmp(${i})">Xóa</button>
+    </td>`;
+  });
+
+  jobTable.innerHTML='<tr><th>Mã</th><th>Vị trí</th><th>Số lượng</th></tr>';
+  jobs.forEach(j=>{
+    let r=jobTable.insertRow();
+    r.innerHTML=`<td>${j.id}</td><td>${j.name}</td><td>${j.qty}</td>`;
+  });
+
+  totalEmp.innerText=employees.length;
+  totalJob.innerText=jobs.length;
+
+  drawChart();
+}
+
+/* CHART */
+function drawChart(){
+  let map={};
+  employees.forEach(e=>{
+    map[e.phong]=(map[e.phong]||0)+1;
+  });
+
+  let labels=Object.keys(map);
+  let data=Object.values(map);
+
+  if(chart) chart.destroy();
+
+  chart=new Chart(document.getElementById('chart'),{
+    type:'bar',
+    data:{labels,datasets:[{label:'Nhân viên',data}]}
+  });
+}
+
+/* JOB */
+function addJob(){
+  jobs.push({id:jobId.value,name:jobName.value,qty:qty.value});
+  save();render();
+}
+
+/* SEARCH */
+function searchEmp(){
+  let k=search.value.toLowerCase();
+  render(employees.filter(e=>e.ten.toLowerCase().includes(k)));
+}
+
+window.onload=load;
+
+</script>
+</body>
+</html>
